@@ -782,7 +782,7 @@ async function dlCard(id){
 function opH(id){
   window._editHmId=id;
   const editBtn=document.getElementById('hm-edit-btn');
-  if(editBtn)editBtn.style.display=R&&R.r==='supervisor'?'block':'none';
+  if(editBtn)editBtn.style.display=R&&R.cd?'block':'none';
   const c=ST.cards.find(x=>x.id===id);if(!c)return;
   document.getElementById('hmt').textContent='Histórico — '+c.os;
   const l=document.getElementById('hl');
@@ -917,7 +917,7 @@ function rnKan(){
       if(filtroAtivo==='ref'&&!c.refeito)return;
       let ex='';if(srch){if(!mi.has(c.id)){return;}ex=' hi';}
       const div=document.createElement('div');div.className='ca'+(ccl?' '+ccl:'')+(c.urgente?' urg':'')+ex;
-      const editBtn=R.r==='supervisor'?'<button style="font-size:10px;padding:3px 9px;border-radius:6px;border:1px solid #BFDBFE;background:#EFF6FF;color:#1D4ED8;cursor:pointer;font-weight:700;font-family:inherit" onclick="opEdit(\''+c.id+'\')">Editar</button>':'';
+      const editBtn=R.cd?'<button style="font-size:10px;padding:3px 9px;border-radius:6px;border:1px solid #BFDBFE;background:#EFF6FF;color:#1D4ED8;cursor:pointer;font-weight:700;font-family:inherit" onclick="opEdit(\''+c.id+'\')">Editar</button>':"";
       div.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px"><div class="cos">${hl(c.os,srch)}</div>${editBtn}</div><div class="cp">${hl(c.ped,srch)}</div>${U&&U.un==='central'&&c.unidade?`<div class="cg" style="font-size:10px;font-weight:600;color:#6B7280;text-transform:uppercase;letter-spacing:.05em">${c.unidade}</div>`:''}${c.refeito?`<div class="cg" style="color:#DC2626;font-weight:700;font-size:11px">SERVIÇO REFEITO</div>`:''}${c.dtVenda?`<div class="cg" style="color:var(--v);font-weight:500">Venda: ${c.dtVenda.split('-').reverse().join('/')}</div>`:''}${c.prazo?`<div class="cg" style="color:${c.urgente?'#DC2626':'var(--mu)'};font-weight:${c.urgente?'700':'500'}">${c.urgente?' URGENTE':''} Entrega: ${c.prazo.split('-').reverse().join('/')}</div>`:''}${c.obs?`<div class="cg" style="color:var(--wa);font-style:italic">${c.obs}${c.receita?' · '+c.receita:''}</div>`:''}${c.lab?`<div class="cg" style="color:var(--mu)">Lab: ${c.lab}</div>`:''}${c.obsmv?`<div class="cg" style="color:var(--mu);font-style:italic">${c.obsmv}</div>`:''}${c.osCompra?`<div class="cg" style="color:var(--mu)">OS Compra: ${c.osCompra}</div>`:''}${c.respGar?`<div class="cg" style="color:var(--mu)">Resp: ${c.respGar}</div>`:''}${c.obsTxt?`<div class="cg" style="color:var(--mu);font-style:italic">${c.obsTxt}</div>`:''}${c.esfOD!=null?`<div class="cg">OD ${fG(c.esfOD,c.cilOD)} · OE ${fG(c.esfOE,c.cilOE)}</div>`:''}<div class="cm"><span class="bg2 ${tGC(c.tipo)}">${tGL(c.tipo)}</span><span class="tm ${tc}">${ft(h)}</span></div><div class="cu">por ${lu}</div><div class="cac">${cm?`<button class="bn" onclick="mvCard('${c.id}')">${nl}</button>`:''}${ci===5?`<button class="bn" disabled>Concluído</button>`:''}<button class="bh" onclick="opH('${c.id}')">&#9776;</button><button class="bde" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;font-size:11px;padding:4px 8px;border-radius:6px;cursor:pointer" onclick="opRf('${c.id}')">Refazer</button>${R.cd?`<button class="bde" onclick="dlCard('${c.id}')">&#10005;</button>`:''}</div>`;
       col.appendChild(div);
     });

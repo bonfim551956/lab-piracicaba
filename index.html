@@ -787,7 +787,7 @@ function opH(id){
   document.getElementById('hmt').textContent='Histórico — '+c.os;
   const l=document.getElementById('hl');
   if(!c.history||!c.history.length){l.innerHTML='<div style="font-size:12px;color:var(--mu);padding:4px 0">Sem movimentações.</div>';}
-  else{l.innerHTML=c.history.slice().reverse().map(h=>{const rl=h.r&&RS[h.r]?RS[h.r].l:h.r||'';const mt=h.mc?'<span class="mt">mont ✓</span>':'';const rf=h.refeito?`<div style="color:#DC2626;font-size:11px;margin-top:3px">Refazer: ${h.motivoRefeito||''}</div>`:'';const ed=h.edicao?'<span style="font-size:10px;padding:2px 6px;border-radius:5px;background:#EFF6FF;color:#1D4ED8;margin-left:4px;font-weight:700">editado</span>':'';return`<div class="hi"><b>${h.u}</b> <span class="ht">${rl}</span>${mt}${ed} → <b>${CF[h.to]}</b><br><span style="font-size:11px">${fd(h.at)}</span>${rf}</div>`;}).join('');}
+  else{l.innerHTML=c.history.slice().reverse().map(h=>{const rl=h.r&&RS[h.r]?RS[h.r].l:h.r||'';const mt=h.mc?'<span class="mt">mont ✓</span>':'';const rf=h.refeito?`<div style="color:#DC2626;font-size:11px;margin-top:3px">Refazer: ${h.motivoRefeito||''}</div>`:'';const ed=h.edicao?(h.diffs&&h.diffs.length?'<span style="font-size:10px;padding:2px 6px;border-radius:5px;background:#EFF6FF;color:#1D4ED8;margin-left:4px;font-weight:700">editado</span><div style="margin-top:4px">'+h.diffs.map(d=>`<div style="font-size:10px;color:#374151;padding:2px 0"><span style="font-weight:600;color:#1D4ED8">${d.campo}:</span> <span style="color:#DC2626;text-decoration:line-through">${d.de}</span> → <span style="color:#16A34A;font-weight:600">${d.para}</span></div>`).join('')+'</div>':'<span style="font-size:10px;padding:2px 6px;border-radius:5px;background:#EFF6FF;color:#1D4ED8;margin-left:4px;font-weight:700">editado</span>'):'';;return`<div class="hi"><b>${h.u}</b> <span class="ht">${rl}</span>${mt}${ed} → <b>${CF[h.to]}</b><br><span style="font-size:11px">${fd(h.at)}</span>${rf}</div>`;}).join('');}
   document.getElementById('hm').style.display='flex';
 }
 function clsH(){document.getElementById('hm').style.display='none';}
@@ -868,12 +868,17 @@ async function svOS(){
     // Modo edição — atualiza card existente
     const ce=ST.cards.find(x=>x.id===editId);
     if(ce){
+      // Detecta o que mudou
+      const LABELS={os:'Nº OS',ped:'Pedido',tipo:'Tipo',dtVenda:'Dt. Venda',prazo:'Prazo',urgente:'Urgente',obs:'Motivo',respGar:'Responsável',receita:'Receita',obsTxt:'Observação',osCompra:'OS Compra',esfOD:'Esf.OD',esfOE:'Esf.OE',cilOD:'Cil.OD',cilOE:'Cil.OE'};
+      const novos={os,ped,tipo,dtVenda,prazo,urgente:urgente?'Sim':'Não',obs,respGar,receita,obsTxt,osCompra,esfOD:esfODv,esfOE:esfOEv,cilOD:cilODv,cilOE:cilOEv};
+      const antigos={os:ce.os,ped:ce.ped,tipo:ce.tipo,dtVenda:ce.dtVenda,prazo:ce.prazo,urgente:ce.urgente?'Sim':'Não',obs:ce.obs,respGar:ce.respGar,receita:ce.receita,obsTxt:ce.obsTxt,osCompra:ce.osCompra,esfOD:ce.esfOD,esfOE:ce.esfOE,cilOD:ce.cilOD,cilOE:ce.cilOE};
+      const diffs=Object.keys(LABELS).filter(k=>String(novos[k]||'')!==String(antigos[k]||'')).map(k=>({campo:LABELS[k],de:antigos[k]||'—',para:novos[k]||'—'}));
       ce.os=os;ce.ped=ped;ce.tipo=tipo;ce.dtVenda=dtVenda;ce.prazo=prazo;ce.urgente=urgente;
       ce.obs=obs;ce.respGar=respGar;ce.receita=receita;ce.obsTxt=obsTxt;ce.osCompra=osCompra;
       ce.esfOD=esfODv;ce.esfOE=esfOEv;ce.cilOD=cilODv;ce.cilOE=cilOEv;
       ce.ts=Date.now();
       if(!ce.history)ce.history=[];
-      ce.history.push({u:U.n,r:U.r,from:ce.col,to:ce.col,at:Date.now(),mc:false,edicao:true});
+      ce.history.push({u:U.n,r:U.r,from:ce.col,to:ce.col,at:Date.now(),mc:false,edicao:true,diffs});
       clsOs();rnKan();
       await saveCard(ce);
     }

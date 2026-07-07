@@ -764,8 +764,11 @@ async function mvCardExec(id,lab,obsmv){
     [[c.esfOD,c.cilOD||0],[c.esfOE,c.cilOE||0]].forEach(([e,cl])=>{
       if(e===null||e===undefined)return;
       const k=eK(e,cl);
-      if(ST.estoque[k]&&ST.estoque[k].qty>0){ST.estoque[k].qty--;saveEstoque();}
+      console.log('BAIXA: chave=',k,'estoque=',ST.estoque[k]);
+      if(!ST.estoque[k])ST.estoque[k]={esf:e,cil:cl,qty:0};
+      if(ST.estoque[k].qty>0){ST.estoque[k].qty--;console.log('BAIXA OK: nova qty=',ST.estoque[k].qty);}
     });
+    await saveEstoque();
   }
   rnKan();
   await saveCard(c);

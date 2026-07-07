@@ -565,10 +565,13 @@ let U=null,R=null,ST={cards:[],estoque:{}},srch='',per='h',relR=[],filtroUrg=fal
 // ── FIREBASE REST API ──────────────────────────────
 async function fbGet(path){
   const r=await fetch(`${DB}/${path}.json`);
+  if(!r.ok)throw new Error(`fbGet ${path} => ${r.status}`);
   return r.json();
 }
 async function fbSet(path,data){
-  await fetch(`${DB}/${path}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const r=await fetch(`${DB}/${path}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  if(!r.ok){const t=await r.text();throw new Error(`fbSet ${path} => ${r.status}: ${t}`);}
+  return r.json();
 }
 async function fbPatch(path,data){
   await fetch(`${DB}/${path}.json`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
@@ -767,9 +770,18 @@ async function mvCardExec(id,lab,obsmv){
       if(!ST.estoque[k])ST.estoque[k]={esf:e,cil:cl,qty:0};
       if(ST.estoque[k].qty>0){
         ST.estoque[k].qty--;
-        try{await fbSet(`estoque/${k}`,ST.estoque[k]);}catch(err){console.error('Erro baixa estoque:',err);}
+        try{
+          await fbSet(`estoque/${k}`,ST.estoque[k]);
+          const updated=await fbGet(`estoque/${k}`);
+          if(updated)ST.estoque[k]=updated;
+        }catch(err){
+          console.error('ERRO BAIXA ESTOQUE:',err.message);
+          setSy('e','Erro ao salvar estoque: '+err.message);
+        }
       }
     }
+    // Atualiza tela do estoque se estiver aberta
+    if(document.getElementById('es')&&document.getElementById('es').style.display!=='none')rnEst();
   }
   rnKan();
   await saveCard(c);

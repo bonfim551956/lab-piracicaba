@@ -1225,7 +1225,12 @@ async function svEst(){
   const k=eid||eK(e,c);
   ST.estoque[k]={esf:e,cil:c,qty:q};
   clsEm();rnEst();
-  await saveEstoque();
+  try{
+    await fbSet(`estoque/${k}`,ST.estoque[k]);
+  }catch(err){
+    setSy('e','Erro ao salvar estoque: '+err.message);
+    console.error('svEst erro:',err);
+  }
 }
 
 function cC(q){

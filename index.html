@@ -635,6 +635,7 @@ function doLogin(){
     return;
   }
   U=f;R=RS[U.r];
+  localStorage.setItem('idealize_session',JSON.stringify({u:U.u,p:U.p}));
   document.getElementById('ls').style.display='none';
   document.getElementById('as').style.display='flex';
   document.getElementById('av').textContent=U.n.charAt(0).toUpperCase();
@@ -647,6 +648,7 @@ function doLogin(){
 }
 function doLogout(){
   U=null;R=null;
+  localStorage.removeItem('idealize_session');
   document.getElementById('as').style.display='none';
   document.getElementById('ls').style.display='flex';
   ['lu','lp'].forEach(id=>{document.getElementById(id).value='';document.getElementById(id).classList.remove('err');});

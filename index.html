@@ -583,8 +583,9 @@ function setSy(s,m){
 async function loadData(){
   setSy('l','Sincronizando...');
   try{
-    const data=await fetch(`${DB}.json`).then(r=>r.json());
+    const data=await fbGet('');
     if(!data){
+      // Primeira vez — inicializa com estoque da planilha
       await fbSet('estoque',ESTINIT);
       await fbSet('cards',{});
       ST={cards:[],estoque:ESTINIT};
@@ -760,11 +761,22 @@ async function mvCardExec(id,lab,obsmv){
   const baixa=from===0&&COM_BAIXA.includes(c.tipo);
   c.history.push({u:U.n,r:U.r,from,to:c.col,at:Date.now(),mc,garantia:isGarMc,passagem:isPassagem});
   if(baixa){
-    [[c.esfOD,c.cilOD||0],[c.esfOE,c.cilOE||0]].forEach(([e,cl])=>{
-      if(e===null||e===undefined)return;
+    for(const [e,cl] of [[c.esfOD,c.cilOD||0],[c.esfOE,c.cilOE||0]]){
+      if(e===null||e===undefined)continue;
       const k=eK(e,cl);
-      if(ST.estoque[k]&&ST.estoque[k].qty>0){ST.estoque[k].qty--;saveEstoque();}
-    });
+      if(!ST.estoque[k])ST.estoque[k]={esf:e,cil:cl,qty:0};
+      if(ST.estoque[k].qty>0){
+        ST.estoque[k].qty--;
+        try{
+          await fbSet(`estoque/${k}`,ST.estoque[k]);
+          // Recarrega estoque do Firebase para garantir sincronia
+          const updated=await fbGet(`estoque/${k}`);
+          if(updated)ST.estoque[k]=updated;
+        }catch(err){console.error('Erro baixa estoque:',err);}
+      }
+    }
+    // Atualiza tela do estoque se estiver aberta
+    if(document.getElementById('es')&&document.getElementById('es').style.display!=='none')rnEst();
   }
   rnKan();
   await saveCard(c);

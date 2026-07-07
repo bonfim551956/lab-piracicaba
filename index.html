@@ -761,14 +761,15 @@ async function mvCardExec(id,lab,obsmv){
   const baixa=from===0&&COM_BAIXA.includes(c.tipo);
   c.history.push({u:U.n,r:U.r,from,to:c.col,at:Date.now(),mc,garantia:isGarMc,passagem:isPassagem});
   if(baixa){
-    [[c.esfOD,c.cilOD||0],[c.esfOE,c.cilOE||0]].forEach(([e,cl])=>{
-      if(e===null||e===undefined)return;
+    for(const [e,cl] of [[c.esfOD,c.cilOD||0],[c.esfOE,c.cilOE||0]]){
+      if(e===null||e===undefined)continue;
       const k=eK(e,cl);
-      console.log('BAIXA: chave=',k,'estoque=',ST.estoque[k]);
       if(!ST.estoque[k])ST.estoque[k]={esf:e,cil:cl,qty:0};
-      if(ST.estoque[k].qty>0){ST.estoque[k].qty--;console.log('BAIXA OK: nova qty=',ST.estoque[k].qty);}
-    });
-    await saveEstoque();
+      if(ST.estoque[k].qty>0){
+        ST.estoque[k].qty--;
+        try{await fbSet(`estoque/${k}`,ST.estoque[k]);}catch(err){console.error('Erro baixa estoque:',err);}
+      }
+    }
   }
   rnKan();
   await saveCard(c);

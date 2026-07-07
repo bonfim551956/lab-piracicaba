@@ -565,13 +565,10 @@ let U=null,R=null,ST={cards:[],estoque:{}},srch='',per='h',relR=[],filtroUrg=fal
 // ── FIREBASE REST API ──────────────────────────────
 async function fbGet(path){
   const r=await fetch(`${DB}/${path}.json`);
-  if(!r.ok)throw new Error(`fbGet ${path} => ${r.status}`);
   return r.json();
 }
 async function fbSet(path,data){
-  const r=await fetch(`${DB}/${path}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-  if(!r.ok){const t=await r.text();throw new Error(`fbSet ${path} => ${r.status}: ${t}`);}
-  return r.json();
+  await fetch(`${DB}/${path}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
 }
 async function fbPatch(path,data){
   await fetch(`${DB}/${path}.json`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
@@ -586,41 +583,21 @@ function setSy(s,m){
 async function loadData(){
   setSy('l','Sincronizando...');
   try{
-    // Carrega cards
-    const dataCards = await fbGet('cards').catch(()=>null);
-    const rawCards = dataCards || {};
-    const allCards = Object.values(rawCards).sort((a,b)=>(b.tsCreated||b.ts)-(a.tsCreated||a.ts));
-    ST.cards = U.un==='central' ? allCards : allCards.filter(c=>!c.unidade||c.unidade===U.un);
-
-    // Carrega estoque com shallow para verificar se existe
-    const shallowR = await fetch(`${DB}/estoque.json?shallow=true`);
-    if(shallowR.ok){
-      const keys = await shallowR.json();
-      if(keys && Object.keys(keys).length>0){
-        // Existe no banco — carrega completo
-        const estoqueR = await fetch(`${DB}/estoque.json`);
-        if(estoqueR.ok){
-          const estoqueData = await estoqueR.json();
-          ST.estoque = estoqueData || ESTINIT;
-        } else {
-          ST.estoque = ESTINIT;
-        }
-      } else {
-        // Não existe — inicializa no banco
-        ST.estoque = ESTINIT;
-        // Salva chave por chave para não dar 400
-        for(const [k,v] of Object.entries(ESTINIT)){
-          await fetch(`${DB}/estoque/${k}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});
-        }
-      }
+    const data=await fetch(`${DB}.json`).then(r=>r.json());
+    if(!data){
+      await fbSet('estoque',ESTINIT);
+      await fbSet('cards',{});
+      ST={cards:[],estoque:ESTINIT};
     } else {
-      ST.estoque = ESTINIT;
+      const rawCards=data.cards||{};
+      const allCards=Object.values(rawCards).sort((a,b)=>(b.tsCreated||b.ts)-(a.tsCreated||a.ts));
+      ST.cards=U.un==='central'?allCards:allCards.filter(c=>!c.unidade||c.unidade===U.un);
+      ST.estoque=data.estoque&&Object.keys(data.estoque).length>0?data.estoque:ESTINIT;
     }
-
     setSy('ok','Sincronizado — '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}));
     rnKan();
   }catch(e){
-    setSy('e','Erro de conexão: '+e.message);
+    setSy('e','Erro de conexão...');
     setTimeout(loadData,5000);
   }
 }
@@ -783,24 +760,11 @@ async function mvCardExec(id,lab,obsmv){
   const baixa=from===0&&COM_BAIXA.includes(c.tipo);
   c.history.push({u:U.n,r:U.r,from,to:c.col,at:Date.now(),mc,garantia:isGarMc,passagem:isPassagem});
   if(baixa){
-    for(const [e,cl] of [[c.esfOD,c.cilOD||0],[c.esfOE,c.cilOE||0]]){
-      if(e===null||e===undefined)continue;
+    [[c.esfOD,c.cilOD||0],[c.esfOE,c.cilOE||0]].forEach(([e,cl])=>{
+      if(e===null||e===undefined)return;
       const k=eK(e,cl);
-      if(!ST.estoque[k])ST.estoque[k]={esf:e,cil:cl,qty:0};
-      if(ST.estoque[k].qty>0){
-        ST.estoque[k].qty--;
-        try{
-          await fbSet(`estoque/${k}`,ST.estoque[k]);
-          const updated=await fbGet(`estoque/${k}`);
-          if(updated)ST.estoque[k]=updated;
-        }catch(err){
-          console.error('ERRO BAIXA ESTOQUE:',err.message);
-          setSy('e','Erro ao salvar estoque: '+err.message);
-        }
-      }
-    }
-    // Atualiza tela do estoque se estiver aberta
-    if(document.getElementById('es')&&document.getElementById('es').style.display!=='none')rnEst();
+      if(ST.estoque[k]&&ST.estoque[k].qty>0){ST.estoque[k].qty--;saveEstoque();}
+    });
   }
   rnKan();
   await saveCard(c);
@@ -1239,12 +1203,7 @@ async function svEst(){
   const k=eid||eK(e,c);
   ST.estoque[k]={esf:e,cil:c,qty:q};
   clsEm();rnEst();
-  try{
-    await fbSet(`estoque/${k}`,ST.estoque[k]);
-  }catch(err){
-    setSy('e','Erro ao salvar estoque: '+err.message);
-    console.error('svEst erro:',err);
-  }
+  await saveEstoque();
 }
 
 function cC(q){

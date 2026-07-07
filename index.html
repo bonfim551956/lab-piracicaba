@@ -586,22 +586,27 @@ function setSy(s,m){
 async function loadData(){
   setSy('l','Sincronizando...');
   try{
-    const data=await fbGet('');
-    if(!data){
-      // Primeira vez — inicializa com estoque da planilha
-      await fbSet('estoque',ESTINIT);
-      await fbSet('cards',{});
-      ST={cards:[],estoque:ESTINIT};
+    // Carrega cards e estoque separadamente para evitar payload grande
+    const [dataCards, dataEstoque] = await Promise.all([
+      fbGet('cards'),
+      fbGet('estoque')
+    ]);
+
+    if(!dataCards && !dataEstoque){
+      // Primeira vez — inicializa
+      await fbSet('estoque', ESTINIT);
+      await fbSet('cards', {});
+      ST={cards:[], estoque:ESTINIT};
     } else {
-      const rawCards=data.cards||{};
-      const allCards=Object.values(rawCards).sort((a,b)=>(b.tsCreated||b.ts)-(a.tsCreated||a.ts));
-      ST.cards=U.un==='central'?allCards:allCards.filter(c=>!c.unidade||c.unidade===U.un);
-      ST.estoque=data.estoque&&Object.keys(data.estoque).length>0?data.estoque:ESTINIT;
+      const rawCards = dataCards || {};
+      const allCards = Object.values(rawCards).sort((a,b)=>(b.tsCreated||b.ts)-(a.tsCreated||a.ts));
+      ST.cards = U.un==='central' ? allCards : allCards.filter(c=>!c.unidade||c.unidade===U.un);
+      ST.estoque = dataEstoque && Object.keys(dataEstoque).length>0 ? dataEstoque : ESTINIT;
     }
     setSy('ok','Sincronizado — '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}));
     rnKan();
   }catch(e){
-    setSy('e','Erro de conexão...');
+    setSy('e','Erro de conexão: '+e.message);
     setTimeout(loadData,5000);
   }
 }

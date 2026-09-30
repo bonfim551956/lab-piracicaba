@@ -13,6 +13,10 @@
 // para número arbitrário.
 // ============================================================================
 
+// Espaço colado no copiar/colar é o erro mais comum ao configurar a Vercel.
+// Limpamos tudo aqui na entrada para nunca mais dar problema.
+const limpo = v => (v === undefined || v === null) ? v : String(v).trim();
+
 const {
   ZAPI_INSTANCE,          // id da instância no Z-API
   ZAPI_TOKEN,             // token da instância
@@ -24,20 +28,34 @@ const {
   ORIGENS,                // 'https://saovicente.oticasidealize.online'
   AGENDAR_INDIQUE,        // 'sim' liga o convite 24h depois. Qualquer outra
                           // coisa (ou ausente) = só o aviso de pronto.
-} = process.env;
+} = Object.fromEntries(Object.entries(process.env).map(([k, v]) => [k, limpo(v)]));
 
-const COLUNAS = ['Pedido', 'Ag. montagem', 'Em montagem', 'Pronto', 'Avisado', 'Entregue'];
+const COLUNAS = ['Venda', 'Pedido', 'Montagem', 'Pronto', 'Avisado', 'Entregue',
+                'Não retirado', 'Cancelada'];
 const MINUTOS_ENTRE_ENVIOS = 10;   // trava contra clique repetido
 
 function texto(card) {
-  const nome = String(card.cliente || '').trim();
-  // sem nome cadastrado, a frase se ajusta em vez de deixar buraco
+  // Só o primeiro nome: o cadastro guarda o nome completo, mas a mensagem
+  // fica mais natural e mais curta com o primeiro.
+  const nome = String(card.cliente || '').trim().split(/\s+/)[0] || '';
   const emNome = nome ? ` em nome de: ${nome}` : '';
+
+  // OS mista: um óculos saiu do estoque e já está pronto, o outro ainda
+  // depende do fornecedor. A mensagem precisa deixar isso claro.
+  if (Number(card.col) < 3 && card.hora_pronto) {
+    return 'Olá, tudo bem?\n'
+      + `Somos das Óticas Idealize 🕶️ e temos uma ÓTIMA NOTÍCIA: `
+      + `um dos óculos da sua Ordem de Serviço nº ${card.os}${emNome} já está pronto `
+      + `para retirada! 😉\n\n`
+      + 'O outro ainda está em produção e avisamos assim que ficar pronto.\n\n'
+      + '*_Estamos abertos de segunda a sexta das 9h às 19h, '
+      + 'e aos sábados e feriados das 9h às 15h._*';
+  }
   return 'Olá, tudo bem?\n'
        + `Somos das Óticas Idealize 🕶️ e venho lhe trazer uma ÓTIMA NOTÍCIA, `
-       + `seu óculos da Ordem de Serviço nº ${card.os}${emNome} já está pronto! 😉\n`
-       + 'Estamos abertos de segunda a sexta das 9h às 19h, '
-       + 'e aos sábados e feriados das 9h às 15h.';
+       + `seu óculos da Ordem de Serviço nº ${card.os}${emNome} já está pronto! 😉\n\n`
+       + '*_Estamos abertos de segunda a sexta das 9h às 19h, '
+       + 'e aos sábados e feriados das 9h às 15h._*';
 }
 
 // (13) 99123-4567 -> 5513991234567
@@ -48,18 +66,40 @@ function numero(tel) {
   return d;
 }
 
-async function sb(caminho, opcoes = {}) {
-  const r = await fetch(`${SB_URL}/rest/v1/${caminho}`, {
-    ...opcoes,
-    headers: {
-      apikey: SB_SERVICE_KEY,
-      Authorization: `Bearer ${SB_SERVICE_KEY}`,
-      'Content-Type': 'application/json',
-      ...(opcoes.headers || {}),
-    },
-  });
-  if (!r.ok) throw new Error(`Supabase ${r.status}: ${await r.text()}`);
-  return r.status === 204 ? null : r.json();
+// Falha temporária do Supabase (502/503/504) acontece de vez em quando.
+// Em vez de desistir na primeira, tentamos de novo com uma pausa curta.
+async function sb(caminho, opcoes = {}, tentativa = 1) {
+  const base = String(SB_URL).replace(/\/+$/, '');
+  const parar = new AbortController();
+  const relogio = setTimeout(() => parar.abort(), 8000);   // 8s por tentativa
+  try {
+    const r = await fetch(`${base}/rest/v1/${caminho}`, {
+      ...opcoes,
+      signal: parar.signal,
+      headers: {
+        apikey: SB_SERVICE_KEY,
+        Authorization: `Bearer ${SB_SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+        ...(opcoes.headers || {}),
+      },
+    });
+    if (!r.ok) {
+      const temporario = r.status >= 500;
+      if (temporario && tentativa < 3) {
+        await new Promise(x => setTimeout(x, 600 * tentativa));
+        return sb(caminho, opcoes, tentativa + 1);
+      }
+      throw new Error(`Supabase ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    }
+    return r.status === 204 ? null : r.json();
+  } catch (e) {
+    if (e.name === 'AbortError' && tentativa < 3) {
+      return sb(caminho, opcoes, tentativa + 1);
+    }
+    throw e;
+  } finally {
+    clearTimeout(relogio);
+  }
 }
 
 module.exports = async (req, res) => {
@@ -88,7 +128,8 @@ module.exports = async (req, res) => {
     if (!id) return res.status(400).json({ erro: 'Informe o id da OS.' });
 
     // ── busca a OS no banco (é o servidor quem decide os dados) ────────────
-    const achados = await sb(`os_cards?id=eq.${encodeURIComponent(id)}&select=*`);
+    const achados = await sb(`os_cards?id=eq.${encodeURIComponent(id)}`
+      + `&select=id,unidade,os,col,cliente,telefone,history,hora_pronto`);
     const card = achados && achados[0];
     if (!card) return res.status(404).json({ erro: 'OS não encontrada.' });
 
@@ -96,9 +137,13 @@ module.exports = async (req, res) => {
     if (LOJA_UNIDADE && card.unidade !== LOJA_UNIDADE) {
       return res.status(403).json({ erro: 'Esta OS é de outra unidade.' });
     }
-    if (Number(card.col) < 3) {
+    if (Number(card.col) === 7) {
+      return res.status(400).json({ erro: 'Esta OS foi cancelada.' });
+    }
+    if (Number(card.col) < 3 && !card.hora_pronto) {
       return res.status(400).json({
-        erro: `A OS ainda está em "${COLUNAS[card.col] || card.col}". O aviso só vale a partir de Pronto.`,
+        erro: `A OS ainda está em "${COLUNAS[card.col] || card.col}". O aviso só vale a partir de Pronto`
+          + ` — ou quando o óculos de hora for marcado como pronto.`,
       });
     }
     const fone = numero(card.telefone);
@@ -108,7 +153,12 @@ module.exports = async (req, res) => {
 
     // ── evita disparo duplicado por clique repetido ────────────────────────
     const historico = Array.isArray(card.history) ? card.history : [];
-    const ultimo = historico.filter(h => h && h.whats).map(h => h.at || 0).sort((a, b) => b - a)[0];
+    // a trava contra clique repetido vale dentro da mesma etapa: ter avisado
+    // o óculos de hora não pode bloquear o aviso do pedido completo
+    const parcialAgora = Number(card.col) < 3;
+    const ultimo = historico
+      .filter(h => h && h.whats && (!!h.parcial) === parcialAgora)
+      .map(h => h.at || 0).sort((a, b) => b - a)[0];
     if (ultimo && Date.now() - ultimo < MINUTOS_ENTRE_ENVIOS * 60000) {
       const faltam = Math.ceil((MINUTOS_ENTRE_ENVIOS * 60000 - (Date.now() - ultimo)) / 60000);
       return res.status(429).json({
@@ -143,13 +193,23 @@ module.exports = async (req, res) => {
       r: (corpo.perfil || ''),
       from: card.col, to: card.col, at: Date.now(),
       mc: false, whats: true, auto: true,
+      // parcial = aviso do óculos de hora, antes do pedido completo ficar pronto
+      parcial: Number(card.col) < 3,
       zapId: resposta.messageId || resposta.id || null,
     });
-    await sb(`os_cards?id=eq.${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ history: historico }),
-    });
+    // A MENSAGEM JÁ SAIU. Se gravar o histórico falhar, não devolvemos erro:
+    // o atendente clicaria de novo e o cliente receberia duas vezes.
+    let historicoGravado = true;
+    try {
+      await sb(`os_cards?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ history: historico }),
+      });
+    } catch (e) {
+      historicoGravado = false;
+      console.error('Mensagem enviada, mas o histórico não foi gravado:', e.message);
+    }
 
     // ── agenda o convite do Indique e Ganhe para 24h depois ───────────────
     // Só acontece se AGENDAR_INDIQUE estiver como 'sim'. Sem isso, a loja
@@ -183,6 +243,7 @@ module.exports = async (req, res) => {
       telefone: fone,
       messageId: resposta.messageId || resposta.id || null,
       indique_agendado: agendado,
+      historico_gravado: historicoGravado,
     });
   } catch (e) {
     return res.status(500).json({ erro: 'Falha no envio.', detalhe: String(e.message || e) });

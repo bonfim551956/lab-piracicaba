@@ -2429,6 +2429,8 @@ function criarOsDoCrediario(){
   document.getElementById('fvenda').value=total.toFixed(2);
   document.getElementById('frecebido').value=pago||'';
   document.getElementById('fforma').value=(c.financeira==='asaas')?'Asaas':'Multicrediário';
+  tgRetirada();
+  document.getElementById('fretirada').value=falta.toFixed(2);
   calcSaldo();
 
   // um aviso no alto do formulário, para ninguém preencher pagamento de novo
@@ -6275,6 +6277,7 @@ function formasDaOS(c){
 
 function calcSaldo(){
   pintarValorVenda();
+  tgRetirada();
   const venda=num(document.getElementById('fvenda').value);
   const rec=num(document.getElementById('frecebido').value)
     +num(document.getElementById('frecebido2').value)
@@ -6306,10 +6309,18 @@ function calcSaldo(){
     box.textContent='Pago integralmente. Sem saldo.';
   }
 
-  // Asaas e Multicrediário: quanto ainda entra na retirada
+}
+
+// Asaas e Multicrediário: quanto ainda entra na retirada.
+// Precisa rodar SEMPRE. Antes ficava no fim de calcSaldo, depois de um
+// return — numa OS de crediário o campo nunca aparecia, mas o salvamento
+// exigia ele mesmo assim, e ninguém entendia a mensagem.
+function tgRetirada(){
   const f1=document.getElementById('fforma').value;
   const f2=document.getElementById('fforma2').value;
-  const precisa=FIN_RETIRADA.includes(f1)||FIN_RETIRADA.includes(f2);
+  const extras=lerFormasExtras().map(p=>p.forma);
+  const precisa=FIN_RETIRADA.includes(f1)||FIN_RETIRADA.includes(f2)
+    ||extras.some(f=>FIN_RETIRADA.includes(f));
   const w=document.getElementById('fretirada-wrap');
   w.style.display=precisa?'block':'none';
   if(!precisa)document.getElementById('fretirada').value='';

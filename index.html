@@ -4388,6 +4388,18 @@ function opcoesFormas(sel,vazio){
     +FORMAS.map(f=>'<option value="'+f+'">'+f+'</option>').join('');
 }
 
+// Nos recebimentos — entrega e saldo — as financeiras não aparecem: ali só
+// entra dinheiro que o cliente pagou de fato. Elas seguem no formulário da
+// venda, onde quem manda é o contrato do crediário.
+function opcoesFormasRecebimento(sel,vazio){
+  if(!sel)return;
+  const atual=sel.value;
+  sel.innerHTML='<option value="">'+(vazio||'Selecione...')+'</option>'
+    +FORMAS.filter(f=>!/asaas|multicred/i.test(f))
+           .map(f=>'<option value="'+f+'">'+f+'</option>').join('');
+  if(atual&&!/asaas|multicred/i.test(atual))sel.value=atual;
+}
+
 // -- SALDOS A RECEBER ------------------------------------------------------
 // Lista as OS marcadas com saldo. Enquanto nao entrega, esta em aberto.
 // Na entrega, mostra quando foi, quanto entrou e por qual forma.
@@ -4581,8 +4593,8 @@ function opEntrega(id){
   const c=ST.cards.find(x=>x.id===id);if(!c)return;
   document.getElementById('ent-id').value=id;
   document.getElementById('ent-tit').textContent='Confirmar entrega — '+(c.os||'');
-  opcoesFormas(document.getElementById('ent-forma'));
-  opcoesFormas(document.getElementById('ent-forma2'));
+  opcoesFormasRecebimento(document.getElementById('ent-forma'));
+  opcoesFormasRecebimento(document.getElementById('ent-forma2'));
   const av=document.getElementById('ent-saldo');
   if(c.saldo){
     av.style.display='block';
@@ -4622,6 +4634,17 @@ async function svEntrega(){
     if(isNaN(valor2)||valor2<=0){alert('Informe o valor da 2ª forma.');document.getElementById('ent-valor2').focus();return;}
     if(!forma2){alert('Selecione a 2ª forma de pagamento.');document.getElementById('ent-forma2').focus();return;}
   }
+  // Asaas e Multicrediário são financiamento, não dinheiro na gaveta.
+  // Na retirada só entra o que o cliente pagou de fato.
+  const _finEnt=[[forma,valor],[forma2,dois?valor2:0]]
+    .filter(([f,x])=>x>0&&/asaas|multicred/i.test(String(f||'')));
+  if(_finEnt.length){
+    alert('"'+_finEnt[0][0]+'" é financiamento, não entra como recebido na retirada.\n\n'
+      +'Se o cliente parcelou, registre pelo contrato na aba Crediário.\n'
+      +'Se não há nada a receber agora, escolha "Sem saldo".');
+    return;
+  }
+
   const total=valor+(valor2||0);
   if(total===0&&forma!=='Sem saldo'){
     if(!confirm('Valor recebido está zerado.\nSe não há nada a receber, escolha "Sem saldo".\n\nConfirma mesmo assim?'))return;
@@ -6855,7 +6878,7 @@ function opSaldoPago(id){
       : ('Saldo em aberto: R$ '+Number(c.saldoValor||0).toFixed(2)))
     +(c.cliente?('  ·  '+c.cliente):'');
   document.getElementById('sq-valor').value=(_falta>0.001?_falta:Number(c.saldoValor||0))||'';
-  opcoesFormas(document.getElementById('sq-forma'));
+  opcoesFormasRecebimento(document.getElementById('sq-forma'));
   document.getElementById('sq-forma').value='';
   document.getElementById('sq-data').value=hojeBR();
   document.getElementById('sqm').style.display='flex';
